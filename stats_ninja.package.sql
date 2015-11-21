@@ -47,5 +47,13 @@ as
 		, sample_rate						in				number default 0
 	);
 
+	/** Reset a counter back to zero
+	* @author Morten Egan
+	* @param counter_name The name of the counter to reset
+	*/
+	procedure clear (
+		counter_name						in				varchar2
+	);
+
 end stats_ninja;
 /

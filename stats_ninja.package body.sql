@@ -41,6 +41,10 @@ as
 				l_ret_val.statistic_name := 'Simple Moving Average (ms)';
 				l_ret_val.statistic_num_val := sys_context('stats_ninja_c', counter_name || '_ms_sma_10');
 				pipe row(l_ret_val);
+				l_ret_val.counter_name := counter_name;
+				l_ret_val.statistic_name := 'Exp Moving Average (ms)';
+				l_ret_val.statistic_num_val := sys_context('stats_ninja_c', counter_name || '_ms_ema_10');
+				pipe row(l_ret_val);
 			end if;
 		end if;
 	
@@ -94,12 +98,15 @@ as
 
 		l_counter_value							number;
 		l_counter_ms							number;
+		l_counter_ms_count						number;
 		l_counter_ms_avg						number;
 		l_counter_ms_max						number;
 		l_counter_ms_min						number;
 		l_counter_ms_sum						number;
 		l_counter_ms_last_10					varchar2(4000);
 		l_counter_ms_sma_10						number;
+		l_counter_ms_ema_10						number;
+		l_can_ema								boolean := false;
 
 		cursor get_sma10(strin varchar2) is
 			with t_data as (
@@ -130,12 +137,14 @@ as
 								+ 60 * (extract(hour from run_diff)
 								+ 24 * (extract(day from run_diff) )))));
 			dbms_session.set_context('stats_ninja_c', counter_name, '1');
+			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_count', 1);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_avg', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_max', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_min', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_sum', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_last_10', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_sma_10', l_counter_ms);
+			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_ema_10', 0);
 			if sample_rate = 0 then
 				dbms_session.set_context('stats_ninja_c', counter_name || '_sample_rate', 1);
 			else
@@ -147,13 +156,16 @@ as
 								+ 60 * (extract(hour from run_diff)
 								+ 24 * (extract(day from run_diff) )))));
 			l_counter_value := to_number(sys_context('stats_ninja_c', counter_name)) + 1;
+			l_counter_ms_count := 1;
 			dbms_session.set_context('stats_ninja_c', counter_name, l_counter_value);
+			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_count', l_counter_ms_count);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_avg', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_max', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_min', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_sum', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_last_10', l_counter_ms);
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_sma_10', l_counter_ms);
+			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_ema_10', 0);
 			if sample_rate <> 0 then
 				dbms_session.set_context('stats_ninja_c', counter_name || '_sample_rate', sample_rate);
 			end if;
@@ -165,9 +177,12 @@ as
 								+ 60 * (extract(minute from run_diff)
 								+ 60 * (extract(hour from run_diff)
 								+ 24 * (extract(day from run_diff) )))));
+				l_counter_ms_count := to_number(sys_context('stats_ninja_c', counter_name || '_ms_count')) + 1;
+				dbms_session.set_context('stats_ninja_c', counter_name || '_ms_count', l_counter_ms_count);
 				l_counter_ms_last_10 := sys_context('stats_ninja_c', counter_name || '_ms_last_10');
 				if (length(l_counter_ms_last_10) - length(replace(l_counter_ms_last_10,','))) = 9 then
 					l_counter_ms_last_10 := substr(l_counter_ms_last_10, instr(l_counter_ms_last_10, ',') + 1) || ',' || l_counter_ms;
+					l_can_ema := true;
 				else
 					l_counter_ms_last_10 := l_counter_ms_last_10 || ',' || l_counter_ms;
 				end if;
@@ -176,6 +191,14 @@ as
 				fetch get_sma10 into l_counter_ms_sma_10;
 				close get_sma10;
 				dbms_session.set_context('stats_ninja_c', counter_name || '_ms_sma_10', l_counter_ms_sma_10);
+				l_counter_ms_ema_10 := to_number(sys_context('stats_ninja_c', counter_name || '_ms_ema_10'));
+				if l_counter_ms_ema_10 = 0 and l_can_ema then
+					l_counter_ms_ema_10 := round((l_counter_ms - l_counter_ms_sma_10) * 0.1818 + l_counter_ms_sma_10);
+					dbms_session.set_context('stats_ninja_c', counter_name || '_ms_ema_10', l_counter_ms_ema_10);
+				elsif l_can_ema then
+					l_counter_ms_ema_10 := round((l_counter_ms - l_counter_ms_ema_10) * 0.1818 + l_counter_ms_ema_10);
+					dbms_session.set_context('stats_ninja_c', counter_name || '_ms_ema_10', l_counter_ms_ema_10);
+				end if;
 				if sample_rate <> 0 then
 					dbms_session.set_context('stats_ninja_c', counter_name || '_sample_rate', sample_rate);
 				end if;
@@ -187,7 +210,7 @@ as
 				end if;
 				l_counter_ms_sum := l_counter_ms + to_number(sys_context('stats_ninja_c', counter_name || '_ms_sum'));
 				dbms_session.set_context('stats_ninja_c', counter_name || '_ms_sum', l_counter_ms_sum);
-				l_counter_ms_avg := round(l_counter_ms_sum/l_counter_ms);
+				l_counter_ms_avg := round(l_counter_ms_sum/l_counter_ms_count);
 				dbms_session.set_context('stats_ninja_c', counter_name || '_ms_avg', l_counter_ms_avg);
 			end if;
 		end if;
@@ -197,6 +220,46 @@ as
 				null;
 
 	end gs;
+
+	procedure reset (
+		counter_name						in				varchar2
+	)
+	
+	as
+	
+	begin
+	
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name);
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name || '_ms_count');
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name || '_ms_avg');
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name || '_ms_max');
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name || '_ms_min');
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name || '_ms_sum');
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name || '_ms_last_10');
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name || '_ms_sma_10');
+		dbms_session.clear_context(namespace => 'stats_ninja_c', attribute => counter_name || '_ms_ema_10');
+	
+		exception
+			when others then
+				raise;
+	
+	end reset;
+
+	procedure clear (
+		counter_name						in				varchar2
+	)
+	
+	as
+	
+	begin
+	
+		reset(counter_name);
+	
+		exception
+			when others then
+				raise;
+	
+	end clear;
 
 end stats_ninja;
 /
