@@ -47,6 +47,18 @@ as
 		, sample_rate						in				number default 0
 	);
 
+	/** Counter gs overload for extra functions, like Gauges, Histograms or Sets
+	* @author Morten Egan
+	* @param counter_name The name of the counter we want to either add to existing gauge or start gauge.
+	* @param extra_name The name of the extra functionality to call
+	* @param extra_value The value of the extra call
+	*/
+	procedure gs (
+	  counter_name         		in				varchar2
+		, extra_name						in				varchar2
+		, extra_value						in				varchar2
+	);
+
 	/** Reset a counter back to zero
 	* @author Morten Egan
 	* @param counter_name The name of the counter to reset
