@@ -111,6 +111,47 @@ as
 
 	end report_gs;
 
+	function report_gs_formatted (
+		counter_name						in				varchar2
+		, report_format					in				varchar2 default 'text'
+	)
+	return report_gs_formatted_list
+	pipelined
+
+	as
+
+	  l_ret_var               varchar2(4000);
+
+		cursor get_report_values(c_name varchar2) is
+			select counter_name, statistic_name, statistic_num_val
+			from table(stats_ninja.report_gs(c_name));
+
+	begin
+
+		if sys_context('stats_ninja_c', counter_name) is null then
+			l_ret_var := 'This is not the counter you are looking for.';
+			pipe row(l_ret_var);
+		else
+			if upper(report_format) = 'TEXT' then
+				for r in get_report_values(counter_name) loop
+					l_ret_var := rpad(r.statistic_name, 50, ' ') || ': ' || to_char(r.statistic_num_val);
+					pipe row(l_ret_var);
+				end loop;
+			elsif upper(report_format) = 'HTML' then
+				for r in get_report_values(counter_name) loop
+					null;
+				end loop;
+			end if;
+		end if;
+
+	  return;
+
+	  exception
+	    when others then
+	      raise;
+
+	end report_gs_formatted;
+
 	procedure gs (
 		counter_name						in				varchar2
 		, sample_rate						in				number default 0
@@ -203,7 +244,7 @@ as
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_ema_10', 0);
 			if sys_context('stats_ninja_c', counter_name || '_gauge') is not null then
 				l_gauge := to_number(sys_context('stats_ninja_c', counter_name || '_gauge')) + to_number(l_counter_ms);
-				dbms_session.set_context('stats_ninja_c', counter_name || '_gauge', 0);
+				dbms_session.set_context('stats_ninja_c', counter_name || '_gauge', l_counter_ms);
 			end if;
 			if sys_context('stats_ninja_c', counter_name || '_buckets') is not null then
 				handle_histogram(counter_name, l_counter_ms);
@@ -231,7 +272,7 @@ as
 			dbms_session.set_context('stats_ninja_c', counter_name || '_ms_ema_10', 0);
 			if sys_context('stats_ninja_c', counter_name || '_gauge') is not null then
 				l_gauge := to_number(sys_context('stats_ninja_c', counter_name || '_gauge')) + to_number(l_counter_ms);
-				dbms_session.set_context('stats_ninja_c', counter_name || '_gauge', 0);
+				dbms_session.set_context('stats_ninja_c', counter_name || '_gauge', l_gauge);
 			end if;
 			if sys_context('stats_ninja_c', counter_name || '_buckets') is not null then
 				handle_histogram(counter_name, l_counter_ms);
@@ -284,7 +325,7 @@ as
 				dbms_session.set_context('stats_ninja_c', counter_name || '_ms_avg', l_counter_ms_avg);
 				if sys_context('stats_ninja_c', counter_name || '_gauge') is not null then
 					l_gauge := to_number(sys_context('stats_ninja_c', counter_name || '_gauge')) + to_number(l_counter_ms);
-					dbms_session.set_context('stats_ninja_c', counter_name || '_gauge', 0);
+					dbms_session.set_context('stats_ninja_c', counter_name || '_gauge', l_gauge);
 				end if;
 				if sys_context('stats_ninja_c', counter_name || '_buckets') is not null then
 					handle_histogram(counter_name, l_counter_ms);

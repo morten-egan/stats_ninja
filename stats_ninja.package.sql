@@ -16,6 +16,8 @@ as
 	);
 	type report_gs_list is table of report_gs_rec;
 
+	type report_gs_formatted_list is table of varchar2(4000);
+
 	/** Reporting table function for stat counters
 	* @author Morten Egan
 	* @param counter_name The name of the counter to report on
@@ -25,6 +27,17 @@ as
 		counter_name						in				varchar2
 	)
 	return report_gs_list
+	pipelined;
+
+	/** Reporting table function for formatted reports of stat counters
+	* @author Morten Egan
+	* @return report_gs_formatted_list Pipelined formatted return of the report. Could be spooled to file or directed anywhere.
+	*/
+	function report_gs_formatted (
+		counter_name						in				varchar2
+		, report_format					in				varchar2 default 'text'
+	)
+	return report_gs_formatted_list
 	pipelined;
 
 	/** Simple counter. Increment by one for the same counter
